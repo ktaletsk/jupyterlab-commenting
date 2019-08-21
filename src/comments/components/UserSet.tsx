@@ -1,4 +1,21 @@
 import * as React from 'react';
+import { JupyterFrontEnd, JupyterFrontEndPlugin  } from '@jupyterlab/application';
+import { ServerConnection } from '@jupyterlab/services';
+import { URLExt } from '@jupyterlab/coreutils';
+
+function proxiedApiRequest<T>(
+  url: string,
+  settings: ServerConnection.ISettings
+): Promise<T> {
+  return ServerConnection.makeRequest(url, {}, settings).then(response => {
+    if (response.status !== 200) {
+      return response.json().then(data => {
+        throw new ServerConnection.ResponseError(response, data.message);
+      });
+    }
+    return response.json();
+  });
+}
 
 /**
  * React Props
@@ -22,6 +39,10 @@ interface IUserSetStates {
    * @type string
    */
   inputBox: string;
+}
+
+interface IHubResponse {
+    data: string;
 }
 
 export class UserSet extends React.Component<IUserSetProps, IUserSetStates> {
@@ -98,7 +119,20 @@ export class UserSet extends React.Component<IUserSetProps, IUserSetStates> {
    * Handles submit
    */
   handleSubmit(): void {
-    this.props.setUserInfo(this.state.inputBox);
+    const settings = ServerConnection.makeSettings();
+    const requestUrl = URLExt.join(settings.baseUrl, '/hub/user');
+
+    proxiedApiRequest<IHubResponse>(requestUrl, settings)
+    .then(data => {
+      console.log(data);
+      this.props.setUserInfo(data.data);
+    })
+    .catch(() => {
+      console.warn(
+        'The JupyterHubProxyAPI server extension appears to be missing.'
+      );
+    });
+//     this.props.setUserInfo(this.state.inputBox);
   }
 
   /**
@@ -137,3 +171,4 @@ export class UserSet extends React.Component<IUserSetProps, IUserSetStates> {
     }
   };
 }
+
